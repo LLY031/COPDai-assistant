@@ -1,10 +1,12 @@
 {
   "version": 2,
+
   "public": "public",
+
   "rewrites": [
     {
-      "source": "/api/(.*)",
-      "destination": "/api/$1"
+      "source": "/api/chat",
+      "destination": "/api/chat.js"
     },
     {
       "source": "/(.*)",
