@@ -457,30 +457,20 @@ app.post('/api/chat', async (req, res) => {
 
 
 // ================================
-// Vercel 部署模式
+// 启动服务器
 // ================================
-
-module.exports = app;
-
-
-// 本地运行测试
-if (require.main === module) {
-
-  const PORT =
-    process.env.PORT || 3000;
+const PORT =
+  process.env.PORT || 3000;
 
 
-  app.listen(PORT, "0.0.0.0", () => {
+app.listen(PORT, "0.0.0.0",() => {
 
-    console.log('');
-    console.log('========================================');
-    console.log('🚀 AI 智能助手后端启动成功');
-    console.log(
-      `🌐 http://localhost:${PORT}`
-    );
-    console.log('========================================');
-    console.log('');
-
-  });
-
-}
+  console.log('');
+  console.log('========================================');
+  console.log('🚀 AI 智能助手后端启动成功');
+  console.log(
+    `🌐 http://localhost:${PORT}`
+  );
+  console.log('========================================');
+  console.log('');
+});

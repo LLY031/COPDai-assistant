@@ -1,476 +1,1330 @@
-const express = require('express');
-const cors = require('cors');
-const axios = require('axios');
-require('dotenv').config();
+<!DOCTYPE html>
+<html lang="zh-CN">
 
-const app = express();
+<head>
 
-// ================================
-// 基础配置
-// ================================
-app.use(cors());
-app.use(express.json());
-app.use(express.static('public'));
+  <meta charset="UTF-8">
 
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  >
 
-// ================================
-// AI 对话接口
-// ================================
-app.post('/api/chat', async (req, res) => {
-
-  const {
-    message,
-    conversation_id,
-    user_id
-  } = req.body;
-
-  // -------------------------------
-  // 基础参数检查
-  // -------------------------------
-  if (!message || !message.trim()) {
-    res.status(400).json({
-      error: '消息不能为空'
-    });
-    return;
-  }
-
-  // -------------------------------
-  // SSE 响应头
-  // -------------------------------
-  res.setHeader(
-    'Content-Type',
-    'text/event-stream; charset=utf-8'
-  );
-
-  res.setHeader(
-    'Cache-Control',
-    'no-cache, no-transform'
-  );
-
-  res.setHeader(
-    'Connection',
-    'keep-alive'
-  );
-
-  // 防止 Nginx 等服务器缓冲 SSE
-  res.setHeader(
-    'X-Accel-Buffering',
-    'no'
-  );
-
-  // 立即发送响应头
-  if (res.flushHeaders) {
-    res.flushHeaders();
-  }
+  <title>AI 智能助手</title>
 
 
-  console.log('');
-  console.log('========================================');
-  console.log('收到新的 AI 请求');
-  console.log('用户消息:', message);
-  console.log('conversation_id:', conversation_id || '新会话');
-  console.log('user_id:', user_id || 'web_user');
-  console.log('========================================');
+  <style>
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
 
 
-  try {
+    body {
+      font-family:
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        Roboto,
+        sans-serif;
 
-    // ================================
-    // 调用扣子 API
-    // ================================
-    const response = await axios.post(
-      'https://api.coze.cn/v3/chat',
-      {
-        bot_id: process.env.COZE_BOT_ID,
+      background: #f0f2f5;
 
-        // 同一个浏览器使用同一个 user_id
-        user_id: user_id || 'web_user',
+      height: 100vh;
 
-        stream: true,
+      display: flex;
+      flex-direction: column;
+    }
 
-        // 当前用户消息
-        additional_messages: [
-          {
-            role: 'user',
-            content: message,
-            content_type: 'text'
-          }
-        ],
 
-        // 如果已经有 conversation_id，就继续之前的会话
-        ...(conversation_id
-          ? { conversation_id: conversation_id }
-          : {})
-      },
-      {
-        headers: {
-          'Authorization':
-            `Bearer ${process.env.COZE_API_TOKEN}`,
+    /* =========================
+       顶部
+       ========================= */
 
-          'Content-Type':
-            'application/json'
-        },
+    .chat-header {
 
-        // 非常重要：让 axios 以流的方式接收
-        responseType: 'stream'
+      background: #4f46e5;
+
+      color: #fff;
+
+      padding: 16px;
+
+      font-size: 18px;
+
+      font-weight: 600;
+
+      text-align: center;
+
+      box-shadow:
+        0 2px 8px rgba(0,0,0,0.1);
+
+      z-index: 10;
+    }
+
+
+    /* =========================
+       消息区域
+       ========================= */
+
+    .chat-messages {
+
+      flex: 1;
+
+      overflow-y: auto;
+
+      padding: 20px;
+
+      display: flex;
+
+      flex-direction: column;
+
+      gap: 16px;
+    }
+
+
+    .message-row {
+
+      display: flex;
+
+      align-items: flex-start;
+
+      gap: 10px;
+
+      max-width: 100%;
+    }
+
+
+    .message-row.user {
+
+      flex-direction: row-reverse;
+
+      justify-content: flex-start;
+    }
+
+
+    .message-row.bot {
+
+      flex-direction: row;
+
+      justify-content: flex-start;
+    }
+
+
+    /* =========================
+       头像
+       ========================= */
+
+    .message-avatar {
+
+      width: 38px;
+      height: 38px;
+
+      border-radius: 50%;
+
+      flex-shrink: 0;
+
+      display: flex;
+
+      align-items: center;
+
+      justify-content: center;
+
+      font-size: 18px;
+    }
+
+
+    .message-row.user
+    .message-avatar {
+
+      background: #4f46e5;
+
+      color: #fff;
+    }
+
+
+    .message-row.bot
+    .message-avatar {
+
+      background: #e5e7eb;
+    }
+
+
+    /* =========================
+       消息气泡
+       ========================= */
+
+    .message-bubble {
+
+      max-width: 70%;
+
+      padding: 12px 16px;
+
+      border-radius: 16px;
+
+      font-size: 15px;
+
+      line-height: 1.6;
+
+      word-break: break-word;
+
+      white-space: pre-wrap;
+    }
+
+
+    .message-row.user
+    .message-bubble {
+
+      background: #4f46e5;
+
+      color: #fff;
+
+      border-radius:
+        16px 16px 4px 16px;
+    }
+
+
+    .message-row.bot
+    .message-bubble {
+
+      background: #fff;
+
+      color: #1f2937;
+
+      border-radius:
+        16px 16px 16px 4px;
+
+      box-shadow:
+        0 1px 3px rgba(0,0,0,0.08);
+    }
+
+
+    /* =========================
+       AI 正在输入
+       ========================= */
+
+    .typing {
+
+      color: #6b7280;
+
+      font-style: italic;
+    }
+
+
+    /* =========================
+       快捷按钮
+       ========================= */
+
+    .quick-buttons {
+
+      display: flex;
+
+      flex-wrap: wrap;
+
+      gap: 8px;
+
+      padding: 10px 16px;
+
+      background: #fff;
+
+      border-top:
+        1px solid #e5e7eb;
+    }
+
+
+    .quick-btn {
+
+      padding: 6px 14px;
+
+      background: #eef2ff;
+
+      color: #4f46e5;
+
+      border:
+        1px solid #c7d2fe;
+
+      border-radius: 20px;
+
+      font-size: 14px;
+
+      cursor: pointer;
+
+      transition: all 0.2s;
+
+      white-space: nowrap;
+    }
+
+
+    .quick-btn:hover {
+
+      background: #4f46e5;
+
+      color: #fff;
+    }
+
+
+    .quick-btn:disabled {
+
+      opacity: 0.5;
+
+      cursor: not-allowed;
+    }
+
+
+    /* =========================
+       输入区域
+       ========================= */
+
+    .chat-input-area {
+
+      display: flex;
+
+      padding: 12px 16px;
+
+      background: #fff;
+
+      border-top:
+        1px solid #e5e7eb;
+
+      gap: 10px;
+    }
+
+
+    .chat-input-area input {
+
+      flex: 1;
+
+      padding:
+        12px 16px;
+
+      border:
+        1px solid #d1d5db;
+
+      border-radius: 24px;
+
+      font-size: 15px;
+
+      outline: none;
+    }
+
+
+    .chat-input-area input:focus {
+
+      border-color: #4f46e5;
+    }
+
+
+    .chat-input-area button {
+
+      padding:
+        12px 28px;
+
+      background: #4f46e5;
+
+      color: #fff;
+
+      border: none;
+
+      border-radius: 24px;
+
+      font-size: 15px;
+
+      cursor: pointer;
+
+      transition:
+        background 0.2s;
+    }
+
+
+    .chat-input-area button:hover {
+
+      background: #4338ca;
+    }
+
+
+    .chat-input-area
+    button:disabled {
+
+      background: #9ca3af;
+
+      cursor: not-allowed;
+    }
+
+
+    /* =========================
+       新会话按钮
+       ========================= */
+
+    .new-chat-btn {
+
+      position: absolute;
+
+      right: 16px;
+
+      top: 12px;
+
+      padding:
+        6px 12px;
+
+      border:
+        1px solid rgba(255,255,255,0.5);
+
+      background:
+        rgba(255,255,255,0.12);
+
+      color: #fff;
+
+      border-radius: 16px;
+
+      cursor: pointer;
+
+      font-size: 13px;
+    }
+
+
+    .new-chat-btn:hover {
+
+      background:
+        rgba(255,255,255,0.25);
+    }
+
+
+    /* =========================
+       手机适配
+       ========================= */
+
+    @media (max-width: 600px) {
+
+      .message-bubble {
+        max-width: 82%;
       }
-    );
+
+      .quick-buttons {
+        padding: 8px;
+      }
+
+      .quick-btn {
+        font-size: 13px;
+        padding: 6px 10px;
+      }
+
+      .chat-input-area {
+        padding: 10px;
+      }
+
+      .chat-input-area button {
+        padding:
+          12px 20px;
+      }
+    }
+
+  </style>
+
+</head>
 
 
-    // ================================
-    // SSE 缓冲区
-    // ================================
-    let buffer = '';
+<body>
 
 
-    // ================================
-    // 接收扣子 SSE 数据
-    // ================================
-    response.data.on('data', (chunk) => {
+  <!-- =========================
+       顶部
+       ========================= -->
 
-      // chunk 可能只是一个 SSE 事件的一部分
-      // 所以不能直接 JSON.parse
-      buffer += chunk.toString('utf8');
+  <div class="chat-header">
+
+    AI 智能助手
+
+    <button
+      class="new-chat-btn"
+      id="newChatBtn"
+    >
+      新会话
+    </button>
+
+  </div>
 
 
-      // SSE 事件一般以两个换行结束
-      const events = buffer.split(/\r?\n\r?\n/);
+  <!-- =========================
+       聊天区域
+       ========================= -->
 
-      // 最后一个可能是不完整事件
-      buffer = events.pop() || '';
+  <div
+    class="chat-messages"
+    id="chatMessages"
+  ></div>
 
 
-      // ==============================
-      // 逐个处理完整 SSE 事件
-      // ==============================
-      for (const eventBlock of events) {
+  <!-- =========================
+       快捷按钮
+       ========================= -->
 
-        if (!eventBlock.trim()) {
-          continue;
+  <div class="quick-buttons">
+
+    <button
+      class="quick-btn"
+      data-message="1"
+    >
+      1. 找王大爷问诊
+    </button>
+
+
+    <button
+      class="quick-btn"
+      data-message="2"
+    >
+      2. 治疗方案模拟
+    </button>
+
+
+    <button
+      class="quick-btn"
+      data-message="3"
+    >
+      3. 预防小游戏
+    </button>
+
+
+    <button
+      class="quick-btn"
+      data-message="4"
+    >
+      4. 护理方案训练
+    </button>
+
+
+    <button
+      class="quick-btn"
+      data-message="5"
+    >
+      5. 知识树学习
+    </button>
+
+
+    <button
+      class="quick-btn"
+      data-message="6"
+    >
+      6. 查询周报
+    </button>
+
+  </div>
+
+
+  <!-- =========================
+       输入框
+       ========================= -->
+
+  <div class="chat-input-area">
+
+    <input
+      type="text"
+      id="userInput"
+      placeholder="输入消息..."
+      autocomplete="off"
+    >
+
+
+    <button
+      id="sendBtn"
+    >
+      发送
+    </button>
+
+  </div>
+
+
+
+  <script>
+
+    // ==================================================
+    // 全局变量
+    // ==================================================
+
+    let conversationId =
+      sessionStorage.getItem(
+        'conversation_id'
+      ) || null;
+
+
+    let isStreaming = false;
+
+
+    // ==================================================
+    // 用户 ID
+    //
+    // 同一个浏览器保持同一个 user_id
+    // ==================================================
+
+    let userId =
+      localStorage.getItem(
+        'coze_user_id'
+      );
+
+
+    if (!userId) {
+
+      userId =
+        'web_user_' +
+        crypto.randomUUID();
+
+      localStorage.setItem(
+        'coze_user_id',
+        userId
+      );
+    }
+
+
+    // ==================================================
+    // DOM
+    // ==================================================
+
+    const chatMessages =
+      document.getElementById(
+        'chatMessages'
+      );
+
+
+    const userInput =
+      document.getElementById(
+        'userInput'
+      );
+
+
+    const sendBtn =
+      document.getElementById(
+        'sendBtn'
+      );
+
+
+    const newChatBtn =
+      document.getElementById(
+        'newChatBtn'
+      );
+
+
+    const quickButtons =
+      document.querySelectorAll(
+        '.quick-btn'
+      );
+
+
+
+    // ==================================================
+    // 添加消息
+    // ==================================================
+
+    function addMessage(
+      content,
+      role
+    ) {
+
+      const row =
+        document.createElement(
+          'div'
+        );
+
+
+      row.className =
+        `message-row ${role}`;
+
+
+      const avatar =
+        document.createElement(
+          'div'
+        );
+
+
+      avatar.className =
+        'message-avatar';
+
+
+      avatar.textContent =
+        role === 'user'
+          ? '👤'
+          : '🤖';
+
+
+      const bubble =
+        document.createElement(
+          'div'
+        );
+
+
+      bubble.className =
+        'message-bubble';
+
+
+      bubble.textContent =
+        content;
+
+
+      row.appendChild(
+        avatar
+      );
+
+
+      row.appendChild(
+        bubble
+      );
+
+
+      chatMessages.appendChild(
+        row
+      );
+
+
+      scrollToBottom();
+
+
+      return bubble;
+    }
+
+
+
+    // ==================================================
+    // 滚动到底部
+    // ==================================================
+
+    function scrollToBottom() {
+
+      chatMessages.scrollTop =
+        chatMessages.scrollHeight;
+    }
+
+
+
+    // ==================================================
+    // 设置所有按钮状态
+    // ==================================================
+
+    function setButtonsDisabled(
+      disabled
+    ) {
+
+      sendBtn.disabled =
+        disabled;
+
+
+      quickButtons.forEach(
+        button => {
+          button.disabled =
+            disabled;
         }
+      );
 
 
-        let eventName = '';
-        let dataText = '';
+      newChatBtn.disabled =
+        disabled;
+    }
 
 
-        // ------------------------------
-        // 拆分 event / data
-        // ------------------------------
-        const lines =
-          eventBlock.split(/\r?\n/);
+
+    // ==================================================
+    // 新会话
+    // ==================================================
+
+    function newConversation() {
+
+      if (isStreaming) {
+        return;
+      }
 
 
-        for (const line of lines) {
-
-          // event: xxx
-          if (line.startsWith('event:')) {
-
-            eventName =
-              line
-                .slice(6)
-                .trim();
-          }
+      conversationId = null;
 
 
-          // data: xxx
-          else if (line.startsWith('data:')) {
-
-            dataText +=
-              line
-                .slice(5)
-                .trim();
-          }
-        }
+      sessionStorage.removeItem(
+        'conversation_id'
+      );
 
 
-        // 没有 data 就跳过
-        if (!dataText) {
-          continue;
-        }
+      chatMessages.innerHTML =
+        '';
 
 
-        // ==============================
-        // 扣子结束标记
-        // ==============================
-        if (dataText === '[DONE]') {
-          continue;
-        }
+      addMessage(
+        '您好，我是 AI 智能助手，请选择下面的功能或直接输入您的问题。',
+        'bot'
+      );
 
 
-        // ==============================
-        // JSON 解析
-        // ==============================
-        let data;
+      userInput.focus();
+    }
 
-        try {
 
-          data = JSON.parse(dataText);
 
-        } catch (error) {
+    // ==================================================
+    // 发送快捷消息
+    // ==================================================
 
-          console.log(
-            '⚠️ SSE JSON 解析失败:',
-            dataText
+    function sendQuickMessage(
+      number
+    ) {
+
+      if (isStreaming) {
+        return;
+      }
+
+
+      userInput.value =
+        number;
+
+
+      sendMessage();
+    }
+
+
+
+    // ==================================================
+    // 发送消息
+    // ==================================================
+
+    async function sendMessage() {
+
+      // 防止重复点击
+      if (isStreaming) {
+        return;
+      }
+
+
+      const text =
+        userInput.value.trim();
+
+
+      if (!text) {
+        return;
+      }
+
+
+      // ------------------------------
+      // 添加用户消息
+      // ------------------------------
+
+      addMessage(
+        text,
+        'user'
+      );
+
+
+      // 清空输入框
+      userInput.value =
+        '';
+
+
+      // ------------------------------
+      // 开始生成
+      // ------------------------------
+
+      isStreaming = true;
+
+
+      setButtonsDisabled(
+        true
+      );
+
+
+      // ------------------------------
+      // 创建 AI 气泡
+      // ------------------------------
+
+      const botBubble =
+        addMessage(
+          '',
+          'bot'
+        );
+
+
+      botBubble.classList.add(
+        'typing'
+      );
+
+
+      botBubble.textContent =
+        '正在思考...';
+
+
+      // ------------------------------
+      // 完整答案
+      // ------------------------------
+
+      let fullText = '';
+
+
+      try {
+
+        // ==================================================
+        // 请求 Node.js 后端
+        // ==================================================
+
+        const response =
+          await fetch(
+            '/api/chat',
+            {
+              method: 'POST',
+
+              headers: {
+                'Content-Type':
+                  'application/json'
+              },
+
+              body: JSON.stringify({
+
+                message: text,
+
+                conversation_id:
+                  conversationId,
+
+                user_id:
+                  userId
+              })
+            }
           );
 
-          continue;
+
+        // HTTP 错误
+        if (!response.ok) {
+
+          throw new Error(
+            `服务器错误：${response.status}`
+          );
         }
 
 
-        // ==============================
-        // 获取 conversation_id
-        // ==============================
-        if (data.conversation_id) {
+        // 检查是否支持流式读取
+        if (!response.body) {
 
-          res.write(
-            `data: ${JSON.stringify({
-              type: 'conversation',
-              conversation_id:
-                data.conversation_id
-            })}\n\n`
+          throw new Error(
+            '浏览器不支持流式响应'
           );
         }
 
 
         // ==================================================
-        // ★★★ 核心：只转发 delta ★★★
-        //
-        // conversation.message.delta
-        // 才是真正的增量文本
-        //
-        // conversation.message.completed
-        // 不再把 content 发给前端
-        //
-        // 这就是解决“回答重复”的关键
+        // 读取 SSE
         // ==================================================
-        if (
-          eventName ===
-          'conversation.message.delta'
-        ) {
 
-          // 只处理 answer
-          if (
-            data.type === 'answer' &&
-            data.content
+        const reader =
+          response.body.getReader();
+
+
+        const decoder =
+          new TextDecoder(
+            'utf-8'
+          );
+
+
+        let buffer = '';
+
+
+        while (true) {
+
+          const {
+            done,
+            value
+          } =
+            await reader.read();
+
+
+          if (done) {
+            break;
+          }
+
+
+          // ------------------------------
+          // 解码
+          // ------------------------------
+
+          buffer +=
+            decoder.decode(
+              value,
+              {
+                stream: true
+              }
+            );
+
+
+          // ------------------------------
+          // SSE 事件
+          // ------------------------------
+
+          const events =
+            buffer.split(
+              /\r?\n\r?\n/
+            );
+
+
+          // 最后一个可能还没接收完整
+          buffer =
+            events.pop() || '';
+
+
+          // ------------------------------
+          // 处理完整事件
+          // ------------------------------
+
+          for (
+            const eventBlock
+            of events
           ) {
 
-            console.log(
-              '📩 delta:',
-              JSON.stringify(data.content)
-            );
+            if (
+              !eventBlock.trim()
+            ) {
+              continue;
+            }
 
 
-            // 只把增量内容发送给网页
-            res.write(
-              `data: ${JSON.stringify({
-                type: 'answer',
-                content: data.content
-              })}\n\n`
-            );
+            // 找到 data:
+            const lines =
+              eventBlock.split(
+                /\r?\n/
+              );
+
+
+            for (
+              const line
+              of lines
+            ) {
+
+              if (
+                !line.startsWith(
+                  'data:'
+                )
+              ) {
+                continue;
+              }
+
+
+              const jsonStr =
+                line
+                  .slice(5)
+                  .trim();
+
+
+              if (
+                !jsonStr ||
+                jsonStr === '[DONE]'
+              ) {
+                continue;
+              }
+
+
+              // ------------------------------
+              // JSON
+              // ------------------------------
+
+              let data;
+
+
+              try {
+
+                data =
+                  JSON.parse(
+                    jsonStr
+                  );
+
+              } catch (error) {
+
+                console.warn(
+                  'SSE 数据解析失败:',
+                  jsonStr
+                );
+
+                continue;
+              }
+
+
+              // ==================================================
+              // conversation_id
+              // ==================================================
+
+              if (
+                data.type ===
+                'conversation' &&
+                data.conversation_id
+              ) {
+
+                conversationId =
+                  data.conversation_id;
+
+
+                sessionStorage.setItem(
+                  'conversation_id',
+                  conversationId
+                );
+
+
+                continue;
+              }
+
+
+              // ==================================================
+              // AI 增量回答
+              // ==================================================
+
+              if (
+                data.type ===
+                'answer' &&
+                data.content
+              ) {
+
+                // 第一次收到内容时
+                // 去掉“正在思考...”
+                if (
+                  botBubble.classList.contains(
+                    'typing'
+                  )
+                ) {
+
+                  botBubble.classList.remove(
+                    'typing'
+                  );
+
+                  botBubble.textContent =
+                    '';
+                }
+
+
+                // ★★★ 核心 ★★★
+                //
+                // 这里只追加 delta
+                //
+                // completed 不会进入这里
+                //
+                fullText +=
+                  data.content;
+
+
+                // 如果你确实不需要这句话
+                fullText =
+                  fullText.replace(
+                    /数据导入成功/g,
+                    ''
+                  );
+
+
+                // 更新气泡
+                botBubble.textContent =
+                  fullText;
+
+
+                scrollToBottom();
+              }
+
+
+              // ==================================================
+              // AI 消息完成
+              // ==================================================
+
+              else if (
+                data.type ===
+                'completed'
+              ) {
+
+                console.log(
+                  'AI 消息完成'
+                );
+              }
+
+
+              // ==================================================
+              // 整个对话完成
+              // ==================================================
+
+              else if (
+                data.type ===
+                'chat_completed'
+              ) {
+
+                console.log(
+                  'AI 对话完成'
+                );
+              }
+
+
+              // ==================================================
+              // 全部结束
+              // ==================================================
+
+              else if (
+                data.type ===
+                'done'
+              ) {
+
+                console.log(
+                  'SSE 数据结束'
+                );
+              }
+
+
+              // ==================================================
+              // 错误
+              // ==================================================
+
+              else if (
+                data.type ===
+                'error'
+              ) {
+
+                throw new Error(
+                  data.message ||
+                  'AI 服务发生错误'
+                );
+              }
+
+            }
           }
         }
 
 
         // ==================================================
-        // AI 单条消息完成
+        // 流结束后
         // ==================================================
-        else if (
-          eventName ===
-          'conversation.message.completed'
+
+        if (
+          !fullText.trim()
         ) {
 
-          console.log(
-            '✅ AI 消息生成完成'
+          botBubble.classList.remove(
+            'typing'
           );
 
-
-          // 注意：
-          // 这里只告诉前端“完成”
-          // 绝对不能再次发送 data.content
-          res.write(
-            `data: ${JSON.stringify({
-              type: 'completed'
-            })}\n\n`
-          );
+          botBubble.textContent =
+            '（AI 没有返回内容）';
         }
 
 
-        // ==================================================
-        // 整个对话完成
-        // ==================================================
-        else if (
-          eventName ===
-          'conversation.chat.completed'
-        ) {
+      } catch (error) {
 
-          console.log(
-            '✅ 整个对话完成'
-          );
-
-
-          res.write(
-            `data: ${JSON.stringify({
-              type: 'chat_completed'
-            })}\n\n`
-          );
-        }
-
-
-        // ==================================================
-        // 扣子错误
-        // ==================================================
-        else if (
-          eventName ===
-          'conversation.chat.failed'
-        ) {
-
-          console.error(
-            '❌ 扣子对话失败:',
-            data
-          );
-
-
-          res.write(
-            `data: ${JSON.stringify({
-              type: 'error',
-              message:
-                data.message ||
-                'AI 对话失败'
-            })}\n\n`
-          );
-        }
-      }
-    });
-
-
-    // ================================
-    // 扣子 SSE 正常结束
-    // ================================
-    response.data.on('end', () => {
-
-      // 如果还有残留 buffer
-      // 尝试处理最后的数据
-      if (buffer.trim()) {
-
-        console.log(
-          '⚠️ SSE 最后存在未完整处理的数据:',
-          buffer
-        );
-      }
-
-
-      console.log(
-        '🔚 扣子 SSE 连接结束'
-      );
-
-
-      // 告诉前端整个流结束
-      res.write(
-        `data: ${JSON.stringify({
-          type: 'done'
-        })}\n\n`
-      );
-
-
-      res.end();
-    });
-
-
-    // ================================
-    // 扣子流发生错误
-    // ================================
-    response.data.on('error', (error) => {
-
-      console.error(
-        '❌ 扣子 SSE 流错误:',
-        error.message
-      );
-
-
-      if (!res.writableEnded) {
-
-        res.write(
-          `data: ${JSON.stringify({
-            type: 'error',
-            message:
-              'AI 服务连接发生错误'
-          })}\n\n`
+        console.error(
+          'AI 请求失败:',
+          error
         );
 
-        res.end();
+
+        botBubble.classList.remove(
+          'typing'
+        );
+
+
+        botBubble.textContent =
+          '请求失败：' +
+          error.message;
       }
-    });
-
-  }
 
 
-  // ================================
-  // 请求扣子 API 失败
-  // ================================
-  catch (error) {
+      // ==================================================
+      // 恢复按钮
+      // ==================================================
 
-    console.error('');
-    console.error(
-      '========== 扣子 API 调用失败 =========='
-    );
+      finally {
 
-    console.error(
-      '错误信息:',
-      error.message
-    );
+        isStreaming =
+          false;
 
 
-    if (error.response) {
+        setButtonsDisabled(
+          false
+        );
 
-      console.error(
-        '状态码:',
-        error.response.status
-      );
 
-      console.error(
-        '响应数据:',
-        error.response.data
-      );
+        userInput.focus();
+
+
+        scrollToBottom();
+      }
     }
 
 
-    console.error(
-      '========================================'
+
+    // ==================================================
+    // 点击发送
+    //
+    // 注意：
+    // 不再使用 onclick，
+    // 统一使用 addEventListener
+    // ==================================================
+
+    sendBtn.addEventListener(
+      'click',
+      sendMessage
     );
 
 
-    if (!res.writableEnded) {
 
-      res.write(
-        `data: ${JSON.stringify({
-          type: 'error',
-          message:
-            'AI 服务请求失败，请检查服务器配置'
-        })}\n\n`
-      );
+    // ==================================================
+    // 快捷按钮
+    // ==================================================
 
-      res.end();
-    }
-  }
-});
+    quickButtons.forEach(
+      button => {
+
+        button.addEventListener(
+          'click',
+          () => {
+
+            const message =
+              button.dataset.message;
+
+            sendQuickMessage(
+              message
+            );
+          }
+        );
+
+      }
+    );
 
 
-// ================================
-// 启动服务器
-// ================================
-const PORT =
-  process.env.PORT || 3000;
+
+    // ==================================================
+    // 回车发送
+    // ==================================================
+
+    userInput.addEventListener(
+      'keydown',
+      (event) => {
+
+        if (
+          event.key === 'Enter' &&
+          !event.shiftKey
+        ) {
+
+          event.preventDefault();
+
+          sendMessage();
+        }
+      }
+    );
 
 
-app.listen(PORT, "0.0.0.0",() => {
 
-  console.log('');
-  console.log('========================================');
-  console.log('🚀 AI 智能助手后端启动成功');
-  console.log(
-    `🌐 http://localhost:${PORT}`
-  );
-  console.log('========================================');
-  console.log('');
-});
+    // ==================================================
+    // 新会话
+    // ==================================================
+
+    newChatBtn.addEventListener(
+      'click',
+      newConversation
+    );
+
+
+
+    // ==================================================
+    // 页面第一次打开
+    // ==================================================
+
+    addMessage(
+      '您好，我是 AI 智能助手，请选择下面的功能或直接输入您的问题。',
+      'bot'
+    );
+
+
+    userInput.focus();
+
+  </script>
+
+</body>
+
+</html>
