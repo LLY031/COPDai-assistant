@@ -3,22 +3,28 @@ const cors = require('cors');
 const axios = require('axios');
 require('dotenv').config();
 
+
 const app = express();
 
 
 // ================================
 // 基础配置
 // ================================
+
 app.use(cors());
+
 app.use(express.json());
+
 app.use(express.static('public'));
 
 
 
 // ================================
-// AI 对话接口（非流式）
+// AI聊天接口
 // ================================
+
 app.post('/api/chat', async (req, res) => {
+
 
   const {
     message,
@@ -27,13 +33,17 @@ app.post('/api/chat', async (req, res) => {
   } = req.body;
 
 
-  // -------------------------------
+
+  // ================================
   // 参数检查
-  // -------------------------------
+  // ================================
+
   if (!message || !message.trim()) {
 
     return res.status(400).json({
+
       error: '消息不能为空'
+
     });
 
   }
@@ -41,18 +51,26 @@ app.post('/api/chat', async (req, res) => {
 
 
   console.log('');
-  console.log('========================================');
+  console.log('================================');
   console.log('收到新的 AI 请求');
-  console.log('用户消息:', message);
+
+  console.log(
+    '用户消息:',
+    message
+  );
+
   console.log(
     'conversation_id:',
     conversation_id || '新会话'
   );
+
   console.log(
     'user_id:',
     user_id || 'web_user'
   );
-  console.log('========================================');
+
+  console.log('================================');
+
 
 
 
@@ -60,13 +78,16 @@ app.post('/api/chat', async (req, res) => {
 
 
     // ================================
-    // 调用扣子 API
+    // 调用 Coze V3 非流式接口
     // ================================
+
+
     const response = await axios.post(
 
       'https://api.coze.cn/v3/chat',
 
       {
+
 
         bot_id:
           process.env.COZE_BOT_ID,
@@ -76,50 +97,61 @@ app.post('/api/chat', async (req, res) => {
           user_id || 'web_user',
 
 
-        // 非流式
+
+        // ★ 非流式
         stream: false,
 
 
-        additional_messages: [
+
+        additional_messages:[
 
           {
-            role: 'user',
 
-            content: message,
+            role:'user',
 
-            content_type: 'text'
+            content:message,
+
+            content_type:'text'
+
           }
 
         ],
 
 
-        // 继续历史会话
+
         ...(conversation_id
-          ? {
-              conversation_id:
-                conversation_id
-            }
-          : {})
+          ?
+          {
+            conversation_id:
+              conversation_id
+          }
+          :
+          {}
+        )
+
 
       },
 
 
       {
 
-        headers: {
+        headers:{
 
-          'Authorization':
-            `Bearer ${process.env.COZE_API_TOKEN}`,
+
+          Authorization:
+          `Bearer ${process.env.COZE_API_TOKEN}`,
+
 
 
           'Content-Type':
-            'application/json'
+          'application/json'
 
-        },
 
-        timeout: 60000
+        }
+
 
       }
+
 
     );
 
@@ -134,11 +166,10 @@ app.post('/api/chat', async (req, res) => {
 
 
 
-     let answer = '';
 
-    let newConversationId =
-      conversation_id || '';
-
+    // ================================
+    // 解析返回
+    // ================================
 
 
     const data =
@@ -146,53 +177,177 @@ app.post('/api/chat', async (req, res) => {
 
 
 
-    // 获取 conversation_id
-
-    if (data.conversation_id) {
-
-      newConversationId =
-        data.conversation_id;
-
-    }
+    let answer = '';
 
 
 
-    // Coze v3 返回 messages
-
-    if (
-      data.messages &&
-      Array.isArray(data.messages)
-    ) {
+    let newConversationId =
+      conversation_id || '';
 
 
-      const assistantMessage =
-        data.messages.find(
-          item =>
-            item.role === 'assistant'
-        );
 
 
-      if (assistantMessage) {
+    // 获取conversation_id
 
-        answer =
-          assistantMessage.content || '';
+ if (
+  data.data?.conversation_id
+) {
+
+  newConversationId =
+    data.data.conversation_id;
+
+}
+
+
+
+
+    // Coze v3非流式返回
+
+  // ================================
+// 获取 chat_id
+// ================================
+
+const chatId =
+  data.data?.id;
+
+
+console.log(
+  "chatId:",
+  chatId
+);
+
+
+console.log(
+  "conversationId:",
+  newConversationId
+);
+
+
+if(!chatId){
+
+  throw new Error(
+    'Coze没有返回chat_id'
+  );
+
+}
+
+
+
+// ================================
+// 等待AI生成完成
+// ================================
+
+// 等待AI完成，最多轮询20次
+
+let messages = [];
+
+let lastMessageResponse = null;
+
+for(let i=0;i<20;i++){
+
+
+  lastMessageResponse =
+await axios.get(
+
+    'https://api.coze.cn/v3/chat/message/list',
+
+    {
+
+      params:{
+
+        conversation_id:
+          newConversationId,
+
+        chat_id:
+          chatId
+
+      },
+
+
+      headers:{
+
+        Authorization:
+        `Bearer ${process.env.COZE_API_TOKEN}`
 
       }
 
     }
 
+  );
+
+
+  messages =
+lastMessageResponse.data?.data?.messages || [];
 
 
 
-    // 兼容部分返回格式
+  const finished =
+messages.find(
 
-    if (!answer && data.content) {
+  item =>
+  item.role === 'assistant' &&
+  item.content &&
+  item.content.trim()
 
-      answer =
-        data.content;
+);
 
-    }
 
+if(finished){
+
+  break;
+
+}
+
+
+
+// 等待1秒继续查询
+
+  await new Promise(
+    resolve =>
+    setTimeout(resolve,1000)
+  );
+
+}
+
+
+
+
+
+
+console.log(
+  '消息列表:',
+  JSON.stringify(
+    lastMessageResponse?.data
+  )
+);
+
+
+
+
+// ================================
+// 提取AI回答
+// ================================
+
+if(Array.isArray(messages)){
+
+
+const assistantMessage =
+messages.find(
+
+  item =>
+  item.role === 'assistant' &&
+  item.content
+
+);
+ if(assistantMessage){
+
+   answer =
+   assistantMessage.content || '';
+
+ }
+
+
+}
 
 
 
@@ -208,18 +363,18 @@ app.post('/api/chat', async (req, res) => {
     // 返回前端
     // ================================
 
+
     return res.json({
 
-      type: 'answer',
+  type:'answer',
 
-      content: answer,
+  content:
+    answer || 'AI没有生成有效回复',
 
-      conversation_id:
-        newConversationId,
+  conversation_id:
+    newConversationId
 
-      done: true
-
-    });
+});
 
 
 
@@ -227,63 +382,64 @@ app.post('/api/chat', async (req, res) => {
 
 
 
+  catch(error){
 
-  // ================================
-  // 错误处理
-  // ================================
-
-  catch (error) {
 
 
     console.error('');
 
     console.error(
-      '========== 扣子 API 调用失败 =========='
+      '========== Coze调用失败 =========='
     );
 
 
     console.error(
-      '错误信息:',
       error.message
     );
 
 
 
-    if (error.response) {
+    if(error.response){
 
 
       console.error(
-        '状态码:',
+        '状态:',
         error.response.status
       );
 
 
       console.error(
-        '响应数据:',
+        '数据:',
         error.response.data
       );
+
 
     }
 
 
 
     console.error(
-      '========================================'
+      '================================'
     );
+
 
 
 
     return res.status(500).json({
 
-      type: 'error',
+
+      type:'error',
 
       message:
-        'AI 服务请求失败，请检查服务器配置'
+      'AI服务请求失败，请检查服务器配置'
+
 
     });
 
 
+
   }
+
 
 
 });
@@ -293,10 +449,11 @@ app.post('/api/chat', async (req, res) => {
 
 
 // ================================
-// 导出 Express
+// 导出给 Netlify/Vercel
 // ================================
-module.exports = app;
 
+
+module.exports = app;
 
 
 
@@ -305,7 +462,8 @@ module.exports = app;
 // 本地运行
 // ================================
 
-if (require.main === module) {
+
+if(require.main === module){
 
 
   const PORT =
@@ -314,18 +472,24 @@ if (require.main === module) {
 
 
   app.listen(
+
     PORT,
+
     "0.0.0.0",
-    () => {
+
+    ()=>{
 
 
       console.log(
-        `🚀 本地服务器运行：http://localhost:${PORT}`
+        `🚀 服务运行:
+        http://localhost:${PORT}`
       );
 
 
     }
 
+
   );
+
 
 }
