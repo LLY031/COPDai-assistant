@@ -134,10 +134,7 @@ app.post('/api/chat', async (req, res) => {
 
 
 
-    // ================================
-    // 提取 AI 回复
-    // ================================
-    let answer = '';
+     let answer = '';
 
     let newConversationId =
       conversation_id || '';
