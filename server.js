@@ -456,21 +456,20 @@ app.post('/api/chat', async (req, res) => {
 });
 
 
-// ================================
-// 启动服务器
-// ================================
-const PORT =
-  process.env.PORT || 3000;
+module.exports = app;
 
 
-app.listen(PORT, "0.0.0.0",() => {
+// 本地运行时启动
+if (require.main === module) {
 
-  console.log('');
-  console.log('========================================');
-  console.log('🚀 AI 智能助手后端启动成功');
-  console.log(
-    `🌐 http://localhost:${PORT}`
-  );
-  console.log('========================================');
-  console.log('');
-});
+  const PORT = process.env.PORT || 3000;
+
+  app.listen(PORT, "0.0.0.0", () => {
+
+    console.log(
+      `🚀 本地服务器运行：http://localhost:${PORT}`
+    );
+
+  });
+
+}
